@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: WooVKI
-Version: 0.2
+Version: 0.3
 Plugin URI: ${TM_PLUGIN_BASE}
 Description: VKontakte (ВКонтакте) - импорт товаров на сайт WooCommerce
 Author: ${TM_NAME}
@@ -14,6 +14,7 @@ if( ! wp_next_scheduled( 'woovki_cron_download_image_featured' ) ) {
 
 require_once 'inc/class-settings.php';
 require_once 'inc/class-images.php';
+require_once 'inc/class-import-categories.php';
 
 class WooVKI {
 
@@ -36,23 +37,29 @@ class WooVKI {
 
     add_action('woovki_action', [$this, 'check_code']);
 
-    add_action('woovki_update_product', [$this, 'update_categories'], 10, 2);
 
   }
 
+  function apivk($method, $args = []){
 
-  function update_categories($product, $data){
-    if(empty($data->albums_ids)){
-      return;
+    $url = 'https://api.vk.com/method/'.$method;
+
+    $url = add_query_arg($args, $url);
+    $url = add_query_arg('access_token', get_option('woovki_access_token'), $url);
+    $url = add_query_arg('v', $this->ver, $url);
+
+    $request = wp_remote_get($url);
+    $response = wp_remote_retrieve_body( $request );
+    $response = json_decode( $response );
+
+    if(isset($response->error)){
+      printf('<p>Код ошибки: %s, детали: %s</p>', $response->error->error_code, $response->error->error_msg);
+      return false;
+    } else {
+      return $response;
     }
-
-    foreach ($data->albums_ids as $value) {
-
-      // var_dump($value);
-      # code...
-    }
-
   }
+
 
   function check_code(){
     if( ! empty($_GET['code'])){
@@ -88,19 +95,13 @@ class WooVKI {
 
       $this->url = $_SERVER['REQUEST_URI'];
 
-
-      // wp_redirect($url);
       wp_redirect(remove_query_arg('code',$this->url));
       exit;
-
     }
   }
 
   //Старт импорта продуктов
   function import(){
-
-    // WooVKI_Images::download_image_featured();
-    // exit;
 
     $url = 'https://api.vk.com/method/market.get';
 
@@ -113,10 +114,15 @@ class WooVKI {
     $response = wp_remote_retrieve_body( $request );
     $response = json_decode( $response );
 
-    $this->import_products($response);
-  }
+    if(isset($response->error)){
+      printf('<p>Код ошибки: %s, детали: %s</p>', $response->error->error_code, $response->error->error_msg);
+    }
 
-  function import_products($response){
+    // echo '<pre>';
+    // var_dump($response);
+    // echo '</pre>';
+
+
 
     foreach ($response->response->items as $key => $value) {
       $this->update_product($value);
@@ -124,10 +130,12 @@ class WooVKI {
 
   }
 
+
   /**
   * Add or update product
   */
   function update_product($data){
+
 
     printf('<h2>%s (%s)</h2>', $data->title, $data->id);
 
@@ -140,6 +148,16 @@ class WooVKI {
     }
 
     printf('<p>product id: %s</p>',$product_id);
+
+    $data_product = array(
+      'ID'            => $product_id,
+      'post_content'  => $data->description,
+      'post_status'   => "publish",
+      'post_title'    => ucfirst($data->title),
+      'post_type'     => "product",
+    );
+
+    wp_update_post( $data_product );
 
     update_post_meta($product_id, 'woovki_import_timestamp', date("Y-m-d H:i:s"));
     update_post_meta($product_id, 'woovki_import_data_cache', serialize($data));
@@ -181,7 +199,7 @@ class WooVKI {
       'post_author' => get_current_user_id(),
       'post_content' => $data->description,
       'post_status' => "publish",
-      'post_title' => $data->title,
+      'post_title' => ucfirst($data->title),
       'post_type' => "product",
     );
 
@@ -194,6 +212,7 @@ class WooVKI {
 
     if($post_id){
         add_post_meta($post_id, '_woovki_item_id', $data->id);
+        echo '<p>Продукт добавлен</p>';
         return $post_id;
     } else {
       return false;
