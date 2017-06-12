@@ -12,7 +12,9 @@ class WooVKI_Images {
 
     add_action('woovki_update_product', [$this, 'update_gallery_images'], 22, 2);
 
-    add_action('woovki_cron_download_image_featured', ['WooVKI_Images', 'download_image_featured']);
+    add_action('woovki_cron_download_image_featured', [$this, 'download_image_featured']);
+
+    add_action('woovki_cron_download_gallery_images', [$this, 'download_gallery_images']);
 
     add_action('woovki_ui_action', [$this, 'display_ui']);
 
@@ -20,17 +22,6 @@ class WooVKI_Images {
 
   }
 
-  function download_images_manual(){
-    $this->manual = true;
-    $this->download_image_featured();
-  }
-
-  function display_ui(){
-    $url = add_query_arg('act', 'download_images', $_SERVER['REQUEST_URI']);
-
-    printf('<a href="%s" class="button">Загрузка картинок вручную</a>', $url);
-
-  }
 
   function download_image_featured(){
 
@@ -46,11 +37,6 @@ class WooVKI_Images {
 
       $img_id = WooVKI_Images::download_image_by_url($url, $post->ID);
 
-      if($this->manual){
-        var_dump($img_id);
-      }
-
-
       if(empty($img_id)){
         error_log('WooVKI - thumbnail image not load');
       } else {
@@ -59,6 +45,89 @@ class WooVKI_Images {
       }
 
     }
+  }
+
+  function download_gallery_images(){
+    $list = get_posts('post_type=product&meta_key=woovki_gallery_list');
+
+    foreach ($list as $key => $post_data) {
+
+      $gallery_source_data = get_post_meta($post_data->ID, 'woovki_gallery_list', true);
+
+      if(empty($gallery_source_data)){
+        continue;
+      }
+
+      $product = wc_get_product($post_data->ID);
+      $gallery_current = $product->get_gallery_image_ids();
+
+      $gallery_new = [];
+      foreach ($gallery_source_data as $key => $value_url) {
+        $img_id = $this->download_image_by_url($value_url, $post_data->ID);
+
+        update_post_meta($img_id, 'woovki_update_timestamp', date("Y-m-d H:i:s"));
+
+        $gallery_new[] = $img_id;
+      }
+
+      $product->set_gallery_image_ids($gallery_new);
+      $check = $product->save();
+
+      delete_post_meta($post_data->ID, 'woovki_gallery_list');
+
+    }
+
+
+
+
+  }
+
+
+
+
+
+  function update_featured_image($product, $data){
+
+    update_post_meta($product->get_id(), 'woovki_plan_image_featured', $data->thumb_photo);
+
+  }
+
+  function update_gallery_images($product, $data){
+
+    if( ! empty($data->photos) ){
+
+      $gallery_list = [];
+      foreach ($data->photos as $value) {
+
+        $data = [
+          'id' => $value->id,
+          'url' => $value->photo_1280,
+        ];
+
+        $gallery_list[$data['id']] = $data['url'];
+
+
+      }
+
+      update_post_meta($product->get_id(), 'woovki_gallery_list', $gallery_list);
+
+    }
+
+    // update_post_meta($product->get_id(), 'woovki_plan_image_featured', $data->thumb_photo);
+
+  }
+
+  function download_images_manual(){
+    $this->manual = true;
+    $this->download_gallery_images();
+    $this->download_image_featured();
+  }
+
+  function display_ui(){
+    $url = add_query_arg('act', 'download_images', $_SERVER['REQUEST_URI']);
+
+    printf('<a href="%s" class="button">Загрузка картинок вручную</a>', $url);
+
   }
 
   function download_image_by_url($url, $post_id){
@@ -70,10 +139,10 @@ class WooVKI_Images {
       return $check[0]->ID;
     }
 
-    // wp_mail('yumashev@fleep.io', 'test', 23);
-
-
+    require_once( ABSPATH . 'wp-admin/includes/image.php' );
     require_once( ABSPATH . 'wp-admin/includes/file.php' );
+    require_once( ABSPATH . 'wp-admin/includes/media.php' );
+
 
     $tmp = download_url( $url, $timeout = 900);
 
@@ -86,8 +155,8 @@ class WooVKI_Images {
 
     // если ошибка
     if( is_wp_error( $id ) ) {
-    	@unlink($file_array['tmp_name']);
-    	return false;
+      @unlink($file_array['tmp_name']);
+      return false;
     }
 
     // удалим временный файл
@@ -100,23 +169,6 @@ class WooVKI_Images {
   }
 
 
-  function update_featured_image($product, $data){
-
-    update_post_meta($product->get_id(), 'woovki_plan_image_featured', $data->thumb_photo);
-    // echo '<pre>';
-    // var_dump($product->id);
-    // var_dump($data->thumb_photo);
-    // var_dump($data);
-    // // var_dump($product);
-    // echo '</pre>';
-
-  }
-
-  function update_gallery_images($product, $data){
-
-  }
-
 }
 
 new WooVKI_Images;
-// $GLOBALS['woovki_images'] = new WooVKI_Images;

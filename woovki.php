@@ -1,25 +1,30 @@
 <?php
 /*
 Plugin Name: WooVKI
-Version: 0.3
-Plugin URI: ${TM_PLUGIN_BASE}
+Version: 0.5
+Plugin URI: http://wpcraft.ru/product/woovki/
 Description: VKontakte (ВКонтакте) - импорт товаров на сайт WooCommerce
-Author: ${TM_NAME}
-Author URI: ${TM_HOMEPAGE}
+Author: WPCraft
+Author URI: http://wpcraft.ru/
 */
 
 if( ! wp_next_scheduled( 'woovki_cron_download_image_featured' ) ) {
   wp_schedule_event( time(), 'wp_wc_updater_cron_interval', 'woovki_cron_download_image_featured' );
 }
 
+if( ! wp_next_scheduled( 'woovki_cron_download_gallery_images' ) ) {
+  wp_schedule_event( time(), 'wp_wc_updater_cron_interval', 'woovki_cron_download_gallery_images' );
+}
+
 require_once 'inc/class-settings.php';
 require_once 'inc/class-images.php';
 require_once 'inc/class-import-categories.php';
+require_once 'inc/class-cron-import-goods.php';
 
 class WooVKI {
 
   private $url;
-  private $ver = '5.64';
+  private static $ver = '5.64';
 
   function __construct() {
     add_action('admin_menu', function(){
@@ -40,13 +45,13 @@ class WooVKI {
 
   }
 
-  function apivk($method, $args = []){
+  public function vkapi($method, $args = []){
 
     $url = 'https://api.vk.com/method/'.$method;
 
     $url = add_query_arg($args, $url);
     $url = add_query_arg('access_token', get_option('woovki_access_token'), $url);
-    $url = add_query_arg('v', $this->ver, $url);
+    // $url = add_query_arg('v', $this->ver, $url);
 
     $request = wp_remote_get($url);
     $response = wp_remote_retrieve_body( $request );
@@ -118,14 +123,10 @@ class WooVKI {
       printf('<p>Код ошибки: %s, детали: %s</p>', $response->error->error_code, $response->error->error_msg);
     }
 
-    // echo '<pre>';
-    // var_dump($response);
-    // echo '</pre>';
-
-
-
-    foreach ($response->response->items as $key => $value) {
-      $this->update_product($value);
+    foreach ($response->response->items as $value) {
+      if(apply_filters('woovki_update_product_check', true, $value)){
+        $this->update_product($value);
+      }
     }
 
   }
