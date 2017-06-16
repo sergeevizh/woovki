@@ -1,20 +1,13 @@
 <?php
 /*
 Plugin Name: WooVKI
-Version: 0.5
+Version: 0.8
 Plugin URI: http://wpcraft.ru/product/woovki/
 Description: VKontakte (ВКонтакте) - импорт товаров на сайт WooCommerce
 Author: WPCraft
 Author URI: http://wpcraft.ru/
 */
 
-if( ! wp_next_scheduled( 'woovki_cron_download_image_featured' ) ) {
-  wp_schedule_event( time(), 'wp_wc_updater_cron_interval', 'woovki_cron_download_image_featured' );
-}
-
-if( ! wp_next_scheduled( 'woovki_cron_download_gallery_images' ) ) {
-  wp_schedule_event( time(), 'wp_wc_updater_cron_interval', 'woovki_cron_download_gallery_images' );
-}
 
 require_once 'inc/class-settings.php';
 require_once 'inc/class-images.php';
@@ -24,9 +17,10 @@ require_once 'inc/class-cron-import-goods.php';
 class WooVKI {
 
   private $url;
-  private static $ver = '5.64';
+  private $ver = '5.64';
 
   function __construct() {
+
     add_action('admin_menu', function(){
         add_management_page(
             $page_title = 'WooVKI',
@@ -42,6 +36,7 @@ class WooVKI {
 
     add_action('woovki_action', [$this, 'check_code']);
 
+    add_action('wooovki_import_item', [$this, 'update_product']);
 
   }
 
@@ -51,7 +46,7 @@ class WooVKI {
 
     $url = add_query_arg($args, $url);
     $url = add_query_arg('access_token', get_option('woovki_access_token'), $url);
-    // $url = add_query_arg('v', $this->ver, $url);
+    $url = add_query_arg('v', $this->ver, $url);
 
     $request = wp_remote_get($url);
     $response = wp_remote_retrieve_body( $request );
@@ -108,24 +103,21 @@ class WooVKI {
   //Старт импорта продуктов
   function import(){
 
-    $url = 'https://api.vk.com/method/market.get';
 
-    $url = add_query_arg('owner_id', get_option('woovki_owner_id'), $url);
-    $url = add_query_arg('access_token', get_option('woovki_access_token'), $url);
-    $url = add_query_arg('extended', 1, $url);
-    $url = add_query_arg('v', $this->ver, $url);
+    $args = [
+      'owner_id' => get_option('woovki_owner_id'),
+      'extended' => 1,
+    ];
 
-    $request = wp_remote_get($url);
-    $response = wp_remote_retrieve_body( $request );
-    $response = json_decode( $response );
+    $data = $this->vkapi($method='market.get', $args);
 
-    if(isset($response->error)){
+    if(isset($data->error)){
       printf('<p>Код ошибки: %s, детали: %s</p>', $response->error->error_code, $response->error->error_msg);
     }
 
-    foreach ($response->response->items as $value) {
+    foreach ($data->response->items as $value) {
       if(apply_filters('woovki_update_product_check', true, $value)){
-        $this->update_product($value);
+        do_action('wooovki_import_item', $value);
       }
     }
 
@@ -137,6 +129,9 @@ class WooVKI {
   */
   function update_product($data){
 
+    if(empty($data->id)){
+      return false;
+    }
 
     printf('<h2>%s (%s)</h2>', $data->title, $data->id);
 

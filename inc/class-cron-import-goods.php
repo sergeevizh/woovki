@@ -41,25 +41,21 @@ class WooVKI_Goods_Import_Cron {
 
     $args = [
       'owner_id' => get_option('woovki_owner_id'),
+      'extended' => 1,
     ];
 
     $data = $GLOBALS['woovki']->vkapi($method='market.get', $args);
 
-    if(empty($data->response)){
+    if(empty($data->response->items)){
       return false;
     }
 
-    if( ! is_array($data->response)){
+    if( ! is_array($data->response->items)){
       return false;
     }
 
-    foreach ($data->response as $vk_product) {
-
-      $GLOBALS['woovki']->update_product($vk_product);
-
-      // echo '<pre>';
-      // var_dump($vk_product);
-      // echo '</pre>';
+    foreach ($data->response->items as $vk_product) {
+      do_action('wooovki_import_item', $vk_product);
     }
 
   }
@@ -71,17 +67,10 @@ class WooVKI_Goods_Import_Cron {
       wp_clear_scheduled_hook( 'woovki_cron_import_goods' );
     } else {
       if( ! wp_next_scheduled( 'woovki_cron_import_goods' ) ) {
-       wp_schedule_event( time(), 'wp_wc_updater_cron_interval', 'woovki_cron_import_goods' );
+       wp_schedule_event( time(), 'hourly', 'woovki_cron_import_goods' );
       }
     }
-    // if(empty(get_option('woovki_import_goods_cron_enabled'))){
-    //   wp_clear_scheduled_hook( 'woovki_cron_import_goods' );
-    // } else {
-    //   if( ! wp_next_scheduled( 'woovki_cron_import_goods' ) ) {
-    //    wp_schedule_event( time(), 'hourly', 'woovki_cron_import_goods' );
-    //   }
-    // }
-
+    
   }
 
   function settings_init(){

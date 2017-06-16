@@ -3,6 +3,15 @@
 /**
  * Images import
  */
+
+ if( ! wp_next_scheduled( 'woovki_cron_download_image_featured' ) ) {
+   wp_schedule_event( time(), 'wp_wc_updater_cron_interval', 'woovki_cron_download_image_featured' );
+ }
+
+ if( ! wp_next_scheduled( 'woovki_cron_download_gallery_images' ) ) {
+   wp_schedule_event( time(), 'wp_wc_updater_cron_interval', 'woovki_cron_download_gallery_images' );
+ }
+
 class WooVKI_Images {
 
   public $manual = false;
@@ -26,16 +35,19 @@ class WooVKI_Images {
   function download_image_featured(){
 
 
-    // var_dump(1);
-
     $list = get_posts('post_type=product&meta_key=woovki_plan_image_featured');
 
     foreach ($list as $post) {
+
 
       $url = get_post_meta($post->ID, 'woovki_plan_image_featured', true);
 
 
       $img_id = WooVKI_Images::download_image_by_url($url, $post->ID);
+
+      if( ! empty($this->manual) ) {
+        var_dump($img_id);
+      }
 
       if(empty($img_id)){
         error_log('WooVKI - thumbnail image not load');
@@ -77,18 +89,20 @@ class WooVKI_Images {
 
     }
 
-
-
-
   }
-
-
-
-
 
   function update_featured_image($product, $data){
 
-    update_post_meta($product->get_id(), 'woovki_plan_image_featured', $data->thumb_photo);
+
+    if( isset($data->photos[0]->photo_1280) ){
+      $url = $data->photos[0]->photo_1280;
+    } elseif ( isset($data->thumb_photo) ) {
+      $url = $data->thumb_photo;
+    } else {
+      return false;
+    }
+
+    update_post_meta($product->get_id(), 'woovki_plan_image_featured', $url);
 
   }
 
@@ -119,8 +133,8 @@ class WooVKI_Images {
 
   function download_images_manual(){
     $this->manual = true;
-    $this->download_gallery_images();
     $this->download_image_featured();
+    $this->download_gallery_images();
   }
 
   function display_ui(){
@@ -139,9 +153,11 @@ class WooVKI_Images {
       return $check[0]->ID;
     }
 
-    require_once( ABSPATH . 'wp-admin/includes/image.php' );
-    require_once( ABSPATH . 'wp-admin/includes/file.php' );
-    require_once( ABSPATH . 'wp-admin/includes/media.php' );
+    if( ! is_admin()){
+      require_once( ABSPATH . 'wp-admin/includes/image.php' );
+      require_once( ABSPATH . 'wp-admin/includes/file.php' );
+      require_once( ABSPATH . 'wp-admin/includes/media.php' );
+    }
 
 
     $tmp = download_url( $url, $timeout = 900);
