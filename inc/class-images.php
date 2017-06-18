@@ -75,6 +75,11 @@ class WooVKI_Images {
 
       $gallery_new = [];
       foreach ($gallery_source_data as $key => $value_url) {
+
+        if( ! filter_var($value_url, FILTER_VALIDATE_URL)){
+          continue;
+        }
+
         $img_id = $this->download_image_by_url($value_url, $post_data->ID);
 
         update_post_meta($img_id, 'woovki_update_timestamp', date("Y-m-d H:i:s"));
@@ -96,6 +101,8 @@ class WooVKI_Images {
 
     if( isset($data->photos[0]->photo_1280) ){
       $url = $data->photos[0]->photo_1280;
+    } elseif ( isset($data->photos[0]->photo_807) ) {
+      $url = $data->photos[0]->photo_807;      
     } elseif ( isset($data->thumb_photo) ) {
       $url = $data->thumb_photo;
     } else {
@@ -108,22 +115,34 @@ class WooVKI_Images {
 
   function update_gallery_images($product, $data){
 
+
     if( ! empty($data->photos) ){
 
       $gallery_list = [];
       foreach ($data->photos as $value) {
 
-        $data = [
-          'id' => $value->id,
-          'url' => $value->photo_1280,
-        ];
+        if(empty($value->id)){
+          continue;
+        }
 
-        $gallery_list[$data['id']] = $data['url'];
+        if(empty($value->photo_1280)){
+            $url = (string)$value->photo_807;
+        } else {
+          $url = (string)$value->photo_1280;
+        }
+
+            //
+            // echo '<pre>';
+            //   var_dump($data);
+            //   echo '</pre>';
+
+        $gallery_list[$value->id] = $url;
 
 
       }
 
       update_post_meta($product->get_id(), 'woovki_gallery_list', $gallery_list);
+      update_post_meta($product->get_id(), 'woovki_gallery_list_serialize', serialize($gallery_list));
 
     }
 

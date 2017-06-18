@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: WooVKI
-Version: 0.8
+Version: 0.8.1
 Plugin URI: http://wpcraft.ru/product/woovki/
 Description: VKontakte (ВКонтакте) - импорт товаров на сайт WooCommerce
 Author: WPCraft
